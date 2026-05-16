@@ -6,7 +6,7 @@ Single-shot LLM worker CLI for local OpenAI-compatible servers. Install via `uv 
 
 ```bash
 # From GitHub
-uv tool install git+https://github.com/<user>/llm-cli.git
+uv tool install git+https://github.com/w1zdun/llm-cli.git
 
 # From local path
 uv tool install /path/to/llm-cli
