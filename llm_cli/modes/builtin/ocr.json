@@ -1,0 +1,15 @@
+{
+  "sampling": {
+    "temperature": 0.0
+  },
+  "system_prompt": "You are an OCR assistant. Extract all visible text from the image exactly as written.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "text": {"type": "string"}
+    },
+    "required": ["text"],
+    "additionalProperties": false
+  },
+  "requires_input": "image"
+}

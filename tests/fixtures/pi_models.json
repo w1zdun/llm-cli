@@ -1,0 +1,42 @@
+{
+  // Pi-shaped models.json
+  "default_provider": "nuc",
+  "providers": {
+    "nuc": {
+      "baseUrl": "http://localhost:8080/v1",
+      "providerKind": "llama.cpp",
+      "models": [
+        {
+          "id": "./Qwen3.6-27B-vision",
+          "name": "Qwen3.6-27B-vision",
+          "input": ["text", "image"],
+          "contextWindow": 32768,
+          "reasoning": true,
+          "thinkingFormat": "qwen-chat-template",
+          "thinkingLevelMap": {
+            "off": "false",
+            "low": "1024",
+            "medium": "2048",
+            "high": "4096",
+            "xhigh": "8192"
+          },
+          "sampling": {
+            "temperature": 0.6
+          }
+        }
+      ]
+    },
+    "vllm-mlx": {
+      "base_url": "http://localhost:8000/v1",
+      "provider_kind": "vllm",
+      "models": [
+        {
+          "id": "./Qwen3.6-35B-A3B-MLX-8bit",
+          "name": "Qwen3.6-35B-A3B-MLX-8bit",
+          "input": ["text"],
+          "context_window": 16384
+        }
+      ]
+    }
+  }
+}

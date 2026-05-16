@@ -1,0 +1,28 @@
+[project]
+name = "llm-cli"
+version = "0.1.0"
+description = "Single-shot LLM worker CLI for local OpenAI-compatible servers"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.28",
+  "typer>=0.15",
+  "pydantic>=2.13",
+  "jsonschema>=4.23",
+  "pymupdf>=1.25",
+  "pillow>=11",
+  "json5>=0.14",
+  "jinja2>=3.1",
+]
+
+[project.scripts]
+llm-cli = "llm_cli.__main__:main"
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.ruff]
+line-length = 80
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

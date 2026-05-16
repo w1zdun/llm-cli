@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+/.venv/
+/.pytest_cache/
+/.ruff_cache/
+
+# Local tooling
+/.claude/
+/.opencode/
+/.pi/
+/.pi-lens/
+
+# OS
+.DS_Store

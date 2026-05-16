@@ -1,0 +1,7 @@
+{
+  "sampling": {
+    "temperature": 0.9,
+    "top_p": 0.95
+  },
+  "system_prompt": "You are a creative design assistant. Explore multiple angles, propose alternatives, and think outside the box."
+}
