@@ -3,5 +3,6 @@
     "temperature": 0.2,
     "top_p": 0.9
   },
-  "system_prompt": "You are a precise coding assistant. Produce correct, minimal code. Explain only when it clarifies the solution."
+  "system_prompt": "You are a precise coding assistant. Produce correct, minimal code. Explain only when it clarifies the solution.",
+  "max_context_tokens": 32000
 }

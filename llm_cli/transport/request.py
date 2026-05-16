@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from llm_cli.config.models_schema import Model, Provider
+from llm_cli.config.models_schema import (
+    Model,
+    Provider,
+    compat_param_mapping_resolved,
+)
 from llm_cli.schemas.encode import encode_schema
 
 
@@ -15,6 +19,7 @@ def build_request(
     sampling: dict[str, Any],
     extra_body: dict[str, Any],
     schema: dict[str, Any] | None = None,
+    max_output_tokens: int | None = None,
 ) -> dict[str, Any]:
     """Build the final request body.
 
@@ -25,6 +30,7 @@ def build_request(
         sampling: Resolved sampling params.
         extra_body: Resolved extra_body.
         schema: Optional JSON Schema.
+        max_output_tokens: Resolved output token budget (from config/CLI).
 
     Returns:
         Complete request body dict.
@@ -39,18 +45,20 @@ def build_request(
     for key, value in sampling.items():
         body[key] = value
 
-    # Handle max_tokens field name per provider compat
-    if "max_tokens" in sampling:
-        max_tokens_field = "max_tokens"
-        if provider.compat and provider.compat.max_tokens_field:
-            max_tokens_field = provider.compat.max_tokens_field
-        if max_tokens_field != "max_tokens":
-            body[max_tokens_field] = body.pop("max_tokens")
+    # Handle max_output_tokens via param_mapping
+    effective_max_output = max_output_tokens
+    if effective_max_output is None and "max_tokens" in sampling:
+        effective_max_output = sampling["max_tokens"]
 
-    # Handle reasoning_effort (from qwen-chat-template encoding)
-    reasoning_effort = extra_body.pop("_reasoning_effort", None)
-    if reasoning_effort is not None:
-        body["reasoning_effort"] = reasoning_effort
+    if effective_max_output is not None:
+        param_mapping = compat_param_mapping_resolved(provider)
+        target_field = param_mapping.get(
+            "max_output_tokens", "max_output_tokens"
+        )
+        # Remove any max_tokens from sampling if we're using mapped field
+        if "max_tokens" in body and target_field != "max_tokens":
+            body.pop("max_tokens", None)
+        body[target_field] = effective_max_output
 
     # Flatten extra_body into top-level
     if extra_body:

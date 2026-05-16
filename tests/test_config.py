@@ -6,10 +6,19 @@ from pathlib import Path
 import pytest
 
 from llm_cli.config.jsonc import JsoncError, read_jsonc
-from llm_cli.config.models_schema import Model, Provider, ProvidersFile
-from llm_cli.config.modes_schema import parse_modes_file
+from llm_cli.config.models_schema import (
+    Model,
+    Provider,
+    ProvidersFile,
+    compat_param_mapping_resolved,
+)
+from llm_cli.config.modes_schema import (
+    Mode,
+    SamplingTemplate,
+    parse_modes_file,
+)
 from llm_cli.config.paths import config_dir, data_dir, ensure_data_dir
-
+from llm_cli.modes.registry import resolve_modes
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -45,7 +54,6 @@ class TestPaths:
 
     def test_ensure_data_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Mock XDG_DATA_HOME
             import os
 
             old = os.environ.get("XDG_DATA_HOME")
@@ -106,6 +114,63 @@ class TestModelsSchema:
         p = Provider(baseUrl="http://localhost/v1", models=[])
         assert p.provider_kind == "openai-generic"
 
+    def test_thinking_level_map_rejected(self):
+        with pytest.raises(Exception, match="thinkingLevelMap"):
+            Model(
+                id="./test",
+                input=["text"],
+                thinkingLevelMap={"low": "1024"},
+            )
+
+    def test_file_passing_default(self):
+        p = Provider(
+            baseUrl="http://localhost/v1",
+            providerKind="llama.cpp",
+            models=[],
+        )
+        assert p.file_passing == "path"
+
+        p2 = Provider(
+            baseUrl="http://localhost/v1",
+            providerKind="openai-generic",
+            models=[],
+        )
+        assert p2.file_passing == "inline"
+
+    def test_param_mapping_resolved(self):
+        p = Provider(
+            baseUrl="http://localhost/v1",
+            providerKind="ollama",
+            models=[],
+        )
+        mapping = compat_param_mapping_resolved(p)
+        assert mapping["max_output_tokens"] == "num_predict"
+
+        p2 = Provider(
+            baseUrl="http://localhost/v1",
+            providerKind="llama.cpp",
+            models=[],
+        )
+        mapping2 = compat_param_mapping_resolved(p2)
+        assert mapping2["max_output_tokens"] == "max_tokens"
+
+    def test_modes_four_layer_resolution(self):
+        """Test that modes merge across builtin/global/provider/model."""
+        raw = read_jsonc(FIXTURES / "pi_models.json")
+        pf = ProvidersFile(**raw)
+        prov = pf.providers["nuc"]
+        model = prov.models[0]
+
+        modes = resolve_modes(pf, "nuc", model)
+        assert "code" in modes
+
+        # Code mode should have provider-level temperature override
+        code_mode = modes["code"]
+        assert code_mode.sampling["temperature"] == 0.1
+
+        # Should inherit max_output_tokens from model-level mode
+        assert code_mode.max_output_tokens == 4096
+
 
 class TestModesSchema:
     def test_parse_modes_file(self):
@@ -142,3 +207,18 @@ class TestModesSchema:
         }
         modes = parse_modes_file(raw)
         assert modes["test"].requires_input == "image"
+
+    def test_mode_role_validation(self):
+        mode = Mode(role="developer")
+        assert mode.role == "developer"
+
+        with pytest.raises(Exception, match="invalid role"):
+            Mode(role="invalid")
+
+    def test_sampling_template_rejects_non_sampling_keys(self):
+        with pytest.raises(Exception, match="non-sampling"):
+            SamplingTemplate(root={"system_prompt": "hello"})
+
+    def test_sampling_template_accepts_sampling_keys(self):
+        template = SamplingTemplate(root={"temperature": 0.7, "top_p": 0.9})
+        assert template.root["temperature"] == 0.7

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Callable, TypeVar
 
 import typer
 from pydantic import ValidationError
 
 from llm_cli.config.jsonc import JsoncError, read_jsonc
 from llm_cli.config.models_schema import ProvidersFile
-from llm_cli.config.modes_schema import Mode, parse_modes_file
+
 from llm_cli.config.paths import config_path
 
 T = TypeVar("T")
@@ -46,15 +46,3 @@ def load_models() -> ProvidersFile:
         raise typer.Exit(1)
 
     return _read_config(path, "models.json", lambda raw: ProvidersFile(**raw))
-
-
-def load_modes() -> dict[str, Mode]:
-    """Load user modes from modes.json. Missing file → empty dict."""
-    path = config_path("modes.json")
-    if not path.exists():
-        return {}
-
-    def _parse(raw: dict[str, Any]) -> dict[str, Mode]:
-        return parse_modes_file(raw)
-
-    return _read_config(path, "modes.json", _parse)

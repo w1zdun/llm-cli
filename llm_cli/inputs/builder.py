@@ -6,7 +6,7 @@ from typing import Any
 
 import typer
 
-from llm_cli.config.models_schema import Model
+from llm_cli.config.models_schema import Model, Provider
 from llm_cli.inputs.image import read_image_file
 from llm_cli.inputs.parser import ParsedInputs, classify_file
 from llm_cli.inputs.pdf import read_pdf_images, read_pdf_text
@@ -17,6 +17,7 @@ from llm_cli.inputs.text import read_text_file
 def build_user_message(
     parsed: ParsedInputs,
     model: Model,
+    provider: Provider,
     pdf_strategy: str = "auto",
     max_pages: int = 25,
 ) -> list[dict[str, Any]]:
@@ -27,6 +28,7 @@ def build_user_message(
     Args:
         parsed: Parsed inputs (file paths + prompt).
         model: Resolved model.
+        provider: Resolved provider (for file_passing).
         pdf_strategy: PDF handling strategy.
         max_pages: Max PDF pages.
 
@@ -34,6 +36,7 @@ def build_user_message(
         Content array for the user message.
     """
     content: list[dict[str, Any]] = []
+    file_passing = provider.file_passing or "inline"
 
     for file_path in parsed.file_paths:
         ftype = classify_file(file_path)
@@ -44,14 +47,16 @@ def build_user_message(
 
         elif ftype == "image":
             check_image_capability(model)
-            entry = read_image_file(file_path)
+            entry = read_image_file(file_path, file_passing=file_passing)
             content.append(entry)
 
         elif ftype == "pdf":
             effective = resolve_pdf_strategy(pdf_strategy, model)
             if effective == "images":
                 check_image_capability(model)
-                images = read_pdf_images(file_path, max_pages)
+                images = read_pdf_images(
+                    file_path, max_pages, file_passing=file_passing
+                )
                 content.extend(images)
             else:
                 text = read_pdf_text(file_path, max_pages)

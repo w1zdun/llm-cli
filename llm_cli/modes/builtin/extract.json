@@ -3,5 +3,6 @@
     "temperature": 0.1,
     "top_p": 0.9
   },
-  "system_prompt": "You are an extraction assistant. Extract structured information from the input."
+  "system_prompt": "You are an extraction assistant. Extract structured information from the input.",
+  "max_context_tokens": 32000
 }

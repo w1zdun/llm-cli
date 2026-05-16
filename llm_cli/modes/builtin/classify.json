@@ -3,5 +3,7 @@
     "temperature": 0.1,
     "top_p": 0.9
   },
-  "system_prompt": "You are a classification assistant. Assign the most accurate category or label."
+  "system_prompt": "You are a classification assistant. Assign the most accurate category or label.",
+  "max_context_tokens": 32000,
+  "max_output_tokens": 2048
 }

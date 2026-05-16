@@ -11,5 +11,7 @@
     "required": ["text"],
     "additionalProperties": false
   },
-  "requires_input": "image"
+  "requires_input": "image",
+  "max_context_tokens": 32000,
+  "max_output_tokens": 4096
 }

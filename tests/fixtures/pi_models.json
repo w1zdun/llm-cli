@@ -1,10 +1,37 @@
 {
-  // Pi-shaped models.json
+  // Pi-shaped models.json (v0.2)
   "default_provider": "nuc",
+  "samplingTemplates": {
+    "qwen3.6-thinking-general": {
+      "temperature": 1.0,
+      "top_p": 0.95,
+      "top_k": 20,
+      "min_p": 0.0,
+      "presence_penalty": 1.5
+    }
+  },
+  "modes": {
+    "code": {
+      "sampling": {
+        "temperature": 0.2,
+        "top_p": 0.9
+      },
+      "system_prompt": "You are a coding assistant."
+    }
+  },
   "providers": {
     "nuc": {
       "baseUrl": "http://localhost:8080/v1",
       "providerKind": "llama.cpp",
+      "filePassing": "path",
+      "maxContextTokens": 32768,
+      "modes": {
+        "code": {
+          "sampling": {
+            "temperature": 0.1
+          }
+        }
+      },
       "models": [
         {
           "id": "./Qwen3.6-27B-vision",
@@ -13,12 +40,13 @@
           "contextWindow": 32768,
           "reasoning": true,
           "thinkingFormat": "qwen-chat-template",
-          "thinkingLevelMap": {
-            "off": "false",
-            "low": "1024",
-            "medium": "2048",
-            "high": "4096",
-            "xhigh": "8192"
+          "supportsDeveloperRole": true,
+          "maxContextTokens": 32768,
+          "maxOutputTokens": 8192,
+          "modes": {
+            "code": {
+              "maxOutputTokens": 4096
+            }
           },
           "sampling": {
             "temperature": 0.6

@@ -4,5 +4,6 @@
     "top_p": 0.9
   },
   "system_prompt": "You are a vision assistant. Describe images accurately and in detail.",
-  "requires_input": "image"
+  "requires_input": "image",
+  "max_context_tokens": 32000
 }

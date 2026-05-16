@@ -8,7 +8,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "w1zdun" }]
 dependencies = [
   "httpx>=0.28",
-  "typer>=0.15",
+  "typer>=0.25",
   "pydantic>=2.13",
   "jsonschema>=4.23",
   "pymupdf>=1.25",
@@ -25,6 +25,9 @@ test = ["pytest>=8"]
 
 [tool.ruff]
 line-length = 80
+
+[tool.hatch.build.targets.wheel]
+packages = ["llm_cli"]
 
 [build-system]
 requires = ["hatchling"]

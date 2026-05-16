@@ -3,5 +3,6 @@
     "temperature": 0.3,
     "top_p": 0.9
   },
-  "system_prompt": "You are a summarization assistant. Produce concise, accurate summaries."
+  "system_prompt": "You are a summarization assistant. Produce concise, accurate summaries.",
+  "max_context_tokens": 32000
 }

@@ -12,8 +12,37 @@ from pydantic import (
     model_validator,
 )
 
+from llm_cli.config.modes_schema import Mode
+
 _VALID_INPUTS = {"text", "image"}
 _VALID_KINDS = {"llama.cpp", "vllm", "ollama", "openai-generic"}
+
+# Per-kind default param_mapping for max_output_tokens
+_DEFAULT_PARAM_MAPPING: dict[str, dict[str, str]] = {
+    "llama.cpp": {"max_output_tokens": "max_tokens"},
+    "vllm": {"max_output_tokens": "max_tokens"},
+    "ollama": {"max_output_tokens": "num_predict"},
+    "openai-generic": {"max_output_tokens": "max_completion_tokens"},
+}
+
+# Per-kind default file_passing
+_DEFAULT_FILE_PASSING: dict[str, str] = {
+    "llama.cpp": "path",
+    "vllm": "path",
+    "ollama": "path",
+    "openai-generic": "inline",
+}
+
+
+def compat_param_mapping_resolved(provider: Provider) -> dict[str, str]:
+    """Return merged param_mapping: per-kind defaults + user override."""
+    kind = provider.provider_kind
+    defaults = _DEFAULT_PARAM_MAPPING.get(kind, {})
+    if provider.compat and provider.compat.param_mapping:
+        merged = {**defaults, **provider.compat.param_mapping}
+    else:
+        merged = dict(defaults)
+    return merged
 
 
 class Model(BaseModel):
@@ -38,10 +67,23 @@ class Model(BaseModel):
         alias="thinkingFormat",
         description="Reasoning encoding format",
     )
-    thinking_level_map: dict[str, Any] | None = Field(
+    supports_developer_role: bool = Field(
+        False,
+        alias="supportsDeveloperRole",
+        description="Whether the model supports the developer role",
+    )
+    max_context_tokens: int | None = Field(
         None,
-        alias="thinkingLevelMap",
-        description="Maps abstract reasoning levels to model-specific values",
+        alias="maxContextTokens",
+        description="Client-side input token budget (never sent to provider)",
+    )
+    max_output_tokens: int | None = Field(
+        None,
+        alias="maxOutputTokens",
+        description="Resolved output token budget (sent via param_mapping)",
+    )
+    modes: dict[str, Mode] | None = Field(
+        None, description="Per-model mode definitions"
     )
     sampling: dict[str, Any] | None = Field(
         None, description="Per-model sampling overrides"
@@ -60,16 +102,28 @@ class Model(BaseModel):
                 )
         return v
 
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_thinking_level_map(cls, data: Any) -> Any:
+        """Reject thinkingLevelMap with a clear error."""
+        if isinstance(data, dict):
+            if "thinkingLevelMap" in data or "thinking_level_map" in data:
+                raise ValueError(
+                    "thinkingLevelMap is no longer supported. "
+                    "Use enable_thinking and preserve_thinking as plain sampling keys instead."
+                )
+        return data
+
 
 class Compat(BaseModel):
     """Provider compatibility settings."""
 
     model_config = ConfigDict(populate_by_name=True)
 
-    max_tokens_field: str | None = Field(
+    param_mapping: dict[str, str] | None = Field(
         None,
-        alias="maxTokensField",
-        description="Field name for max tokens (e.g. max_completion_tokens)",
+        alias="paramMapping",
+        description="Maps abstract param names to provider wire-format field names",
     )
 
 
@@ -93,6 +147,24 @@ class Provider(BaseModel):
         None, alias="apiKey", description="Bearer token for authentication"
     )
     compat: Compat | None = Field(None, description="Compatibility settings")
+    file_passing: str | None = Field(
+        None,
+        alias="filePassing",
+        description="How to pass files: 'path' (file:// URLs) or 'inline' (base64)",
+    )
+    max_context_tokens: int | None = Field(
+        None,
+        alias="maxContextTokens",
+        description="Client-side input token budget (never sent to provider)",
+    )
+    max_output_tokens: int | None = Field(
+        None,
+        alias="maxOutputTokens",
+        description="Resolved output token budget (sent via param_mapping)",
+    )
+    modes: dict[str, Mode] | None = Field(
+        None, description="Per-provider mode definitions"
+    )
     sampling: dict[str, Any] | None = Field(
         None, description="Default sampling for the provider"
     )
@@ -110,6 +182,15 @@ class Provider(BaseModel):
             )
         return v
 
+    @model_validator(mode="after")
+    def _fill_file_passing_default(self) -> Provider:
+        """Fill file_passing from per-kind default if not set."""
+        if self.file_passing is None:
+            self.file_passing = _DEFAULT_FILE_PASSING.get(
+                self.provider_kind, "inline"
+            )
+        return self
+
 
 class ProvidersFile(BaseModel):
     """Top-level models.json structure."""
@@ -126,6 +207,15 @@ class ProvidersFile(BaseModel):
         None,
         alias="defaultModel",
         description="Default model id (scoped to provider)",
+    )
+    sampling_templates: dict[str, dict[str, Any]] | None = Field(
+        None,
+        alias="samplingTemplates",
+        description="Named sampling parameter bundles",
+    )
+    modes: dict[str, Mode] | None = Field(
+        None,
+        description="Global mode definitions (apply to all providers/models)",
     )
 
     @model_validator(mode="after")

@@ -1,4 +1,4 @@
-from llm_cli.config.loader import load_models, load_modes
+from llm_cli.config.loader import load_models
 from llm_cli.config.paths import (
     config_dir,
     config_path,
@@ -13,6 +13,5 @@ __all__ = [
     "data_dir",
     "ensure_data_dir",
     "load_models",
-    "load_modes",
     "runs_log_path",
 ]
