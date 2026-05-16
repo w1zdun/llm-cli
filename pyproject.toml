@@ -3,6 +3,9 @@ name = "llm-cli"
 version = "0.1.0"
 description = "Single-shot LLM worker CLI for local OpenAI-compatible servers"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "w1zdun" }]
 dependencies = [
   "httpx>=0.28",
   "typer>=0.15",
