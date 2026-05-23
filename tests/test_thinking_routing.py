@@ -64,7 +64,8 @@ class TestQwenChatTemplate:
 
 
 class TestOtherFormats:
-    def test_unknown_format_untouched(self):
+    def test_unknown_format_stripped(self):
+        """Non-qwen formats have no wire destination — strip the keys."""
         model = Model(
             id="test",
             input=["text"],
@@ -75,11 +76,11 @@ class TestOtherFormats:
 
         sampling, extra_body = route_thinking(model, sampling, extra_body)
 
-        # Keys stay in sampling for non-qwen formats
-        assert sampling["enable_thinking"] is True
+        assert "enable_thinking" not in sampling
+        assert sampling == {"temperature": 0.7}
         assert extra_body == {}
 
-    def test_no_thinking_format(self):
+    def test_no_thinking_format_stripped(self):
         model = Model(
             id="test",
             input=["text"],
@@ -89,7 +90,7 @@ class TestOtherFormats:
 
         sampling, extra_body = route_thinking(model, sampling, extra_body)
 
-        assert sampling["enable_thinking"] is True
+        assert "enable_thinking" not in sampling
         assert extra_body == {}
 
     def test_no_thinking_keys(self):

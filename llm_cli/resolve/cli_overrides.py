@@ -1,4 +1,4 @@
-"""Parse --set key=value flags into nested dicts."""
+"""Parse --set key=value flags into sampling vs extra_body overrides."""
 
 from __future__ import annotations
 
@@ -30,20 +30,30 @@ def _try_json_decode(value: str) -> Any:
         return value
 
 
-def parse_set_flags(flags: list[str]) -> dict[str, Any]:
+def parse_set_flags(
+    flags: list[str],
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Parse --set key=value flags.
+
+    Routes by dotted-ness: flat keys (no '.') become sampling overrides;
+    dotted keys (e.g. 'chat_template_kwargs.enable_thinking') become
+    nested extra_body overrides.
 
     Args:
         flags: List of "key=value" strings.
 
     Returns:
-        Nested dict with expanded dotted keys.
+        Tuple of (sampling_overrides, extra_body_overrides).
     """
-    result: dict[str, Any] = {}
+    sampling: dict[str, Any] = {}
+    extra_body: dict[str, Any] = {}
     for flag in flags:
         if "=" not in flag:
             continue
         key, _, value = flag.partition("=")
         parsed = _try_json_decode(value)
-        _expand_dotted_key(result, key, parsed)
-    return result
+        if "." in key:
+            _expand_dotted_key(extra_body, key, parsed)
+        else:
+            sampling[key] = parsed
+    return sampling, extra_body

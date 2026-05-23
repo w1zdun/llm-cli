@@ -6,27 +6,19 @@ import json
 import sys
 import time
 import uuid
-from typing import Any
 
+import click
 import httpx
 import typer
+from typer.core import TyperGroup
 
+_SUBCOMMANDS = frozenset({"list", "ping", "show"})
 
-def _first_not_none(values: list[Any]) -> Any:
-    """Return first non-None value from a list."""
-    for val in values:
-        if val is not None:
-            return val
-    return None
-
-
-# Options that take a value (for positional arg extraction)
-_OPTIONS_TAKING_VALUE = frozenset(
-    [
+# Long options on the root callback that consume the next token as their value.
+_LONG_OPTIONS_TAKING_VALUE = frozenset(
+    {
         "--mode",
-        "-m",
         "--provider",
-        "-p",
         "--model",
         "--schema",
         "--pdf-strategy",
@@ -40,56 +32,73 @@ _OPTIONS_TAKING_VALUE = frozenset(
         "--set",
         "--connect-timeout",
         "--read-timeout",
-    ]
+    }
 )
-
-# Boolean flags (no value)
-_BOOL_FLAGS = frozenset(
-    [
-        "--enable-thinking",
-        "--no-enable-thinking",
-        "--preserve-thinking",
-        "--no-preserve-thinking",
-        "--quiet",
-        "-q",
-        "--compact",
-        "--dry-run",
-        "--version",
-        "-V",
-        "--help",
-        "-h",
-    ]
-)
+# Short options on the root callback that consume the next token as their value.
+_SHORT_OPTIONS_TAKING_VALUE = frozenset({"-m", "-p"})
 
 
-def _extract_positional_args() -> list[str]:
-    """Extract positional args from sys.argv, skipping options.
+def _last_not_none(values: list) -> object:
+    """Return last non-None value from a list (CLI-side precedence)."""
+    for val in reversed(values):
+        if val is not None:
+            return val
+    return None
 
-    Typer callbacks cannot use typer.Argument, so we parse sys.argv
-    manually to capture @file paths and prompt strings.
+
+class _DefaultActionGroup(TyperGroup):
+    """Group that lets positional args fall through to the default callback.
+
+    Click's default behavior is to treat the first non-option arg as a
+    subcommand name and raise UsageError if it doesn't match. We want
+    `llm-cli @file "prompt" --mode X` to work, so when no known subcommand
+    is present we strip the positional args before subcommand dispatch
+    and stash them on the context for the callback to read.
     """
-    result: list[str] = []
-    i = 0
-    for arg in sys.argv[1:]:
-        if arg.startswith("-"):
-            if arg in _BOOL_FLAGS:
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        # Walk args. Skip option-value pairs; at the first non-option, non-
+        # subcommand token, treat the rest as positional args for the default
+        # action and hand the prefix to click for normal parsing.
+        kept: list[str] = []
+        positional: list[str] = []
+        i = 0
+        while i < len(args):
+            a = args[i]
+            if a.startswith("-"):
+                kept.append(a)
+                # Long --opt=value: self-contained.
+                if "=" in a and a.startswith("--"):
+                    i += 1
+                    continue
+                # -ovalue (short with attached value): self-contained.
+                if a.startswith("-") and not a.startswith("--") and len(a) > 2:
+                    i += 1
+                    continue
+                # Bare option that consumes the next token.
+                if (
+                    a in _LONG_OPTIONS_TAKING_VALUE
+                    or a in _SHORT_OPTIONS_TAKING_VALUE
+                ):
+                    if i + 1 < len(args):
+                        kept.append(args[i + 1])
+                        i += 2
+                        continue
                 i += 1
                 continue
-            if arg in _OPTIONS_TAKING_VALUE or arg.startswith("--"):
-                i += 2
-                continue
-            # Short option: -mcode (value attached) or -m code (separate)
-            if len(arg) == 2:
-                i += 2
-                continue
-        else:
-            result.append(arg)
-        i += 1
-    return result
+            if a in _SUBCOMMANDS:
+                kept.extend(args[i:])
+                break
+            positional.extend(args[i:])
+            break
+        ctx.ensure_object(dict)
+        ctx.obj["positional_args"] = positional
+        return super().parse_args(ctx, kept)
 
 
 app = typer.Typer(
     add_completion=False,
+    cls=_DefaultActionGroup,
     help="Single-shot LLM worker CLI for local OpenAI-compatible servers.",
 )
 
@@ -224,15 +233,22 @@ def _main(
     ),
 ) -> None:
     """Run a single LLM request (default action)."""
-    import click
-
     ctx = click.get_current_context(silent=True)
     if ctx is not None and ctx.invoked_subcommand is not None:
         return
 
+    positional_args: list[str] = []
+    if ctx is not None and isinstance(ctx.obj, dict):
+        positional_args = list(ctx.obj.get("positional_args", []))
+
+    # No args at all → show help (no_args_is_help behavior).
+    if mode is None and not positional_args and len(sys.argv) <= 1:
+        typer.echo(ctx.get_help() if ctx is not None else "", err=True)
+        raise typer.Exit(1)
+
     from llm_cli.config.loader import load_models
-    from llm_cli.inputs.builder import build_user_message
     from llm_cli.inputs.budget import estimate_tokens
+    from llm_cli.inputs.builder import build_user_message
     from llm_cli.inputs.parser import parse_inputs
     from llm_cli.logging.diagnostics import format_diagnostics
     from llm_cli.logging.run_log import write_run_log
@@ -288,10 +304,8 @@ def _main(
     if sampling_template is not None:
         cli_sampling["sampling_template"] = sampling_template
 
-    cli_overrides = parse_set_flags(set_flags or [])
-    for key, val in cli_overrides.items():
-        if "." not in key:
-            cli_sampling[key] = val
+    set_sampling, set_extra_body = parse_set_flags(set_flags or [])
+    cli_sampling.update(set_sampling)
 
     # Resolve sampling (with template expansion)
     sampling = resolve_sampling(
@@ -300,14 +314,26 @@ def _main(
 
     # Resolve extra_body
     extra_body = resolve_extra_body(
-        prov, selected_model, mode_obj, cli_overrides
+        prov, selected_model, mode_obj, set_extra_body
     )
 
     # Route thinking keys
     sampling, extra_body = route_thinking(selected_model, sampling, extra_body)
 
-    # Resolve token budgets (provider → model → mode → CLI)
-    resolved_max_context = _first_not_none(
+    # Reasoning capability check
+    if (
+        "reasoning" in sampling or "reasoning_effort" in sampling
+    ) and not selected_model.reasoning:
+        typer.echo(
+            f"error: model '{selected_model.id}' does not support reasoning "
+            f"(model.reasoning=false); remove reasoning/reasoning_effort from "
+            f"the sampling layer",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    # Resolve token budgets (CLI > mode > model > provider, last non-None wins).
+    resolved_max_context = _last_not_none(
         [
             prov.max_context_tokens,
             selected_model.max_context_tokens,
@@ -315,7 +341,7 @@ def _main(
             max_context_tokens,
         ]
     )
-    resolved_max_output = _first_not_none(
+    resolved_max_output = _last_not_none(
         [
             prov.max_output_tokens,
             selected_model.max_output_tokens,
@@ -324,14 +350,13 @@ def _main(
         ]
     )
 
-    # Extract positional args from sys.argv (Typer callbacks can't take Arguments)
-    positional_args = _extract_positional_args()
     parsed = parse_inputs(positional_args)
     schema_obj = resolve_schema(schema, mode_obj)
 
     # Check developer role
+    effective_role = mode_obj.effective_role
     if (
-        mode_obj.role == "developer"
+        effective_role == "developer"
         and not selected_model.supports_developer_role
     ):
         typer.echo(
@@ -355,7 +380,7 @@ def _main(
         typer.echo("error: empty content (no files and no prompt)", err=True)
         raise typer.Exit(1)
 
-    messages.append({"role": mode_obj.role, "content": user_content})
+    messages.append({"role": effective_role, "content": user_content})
 
     # Token budget check
     if resolved_max_context is not None:
@@ -552,20 +577,40 @@ def list_command(
                     )
 
     elif what == "modes":
-        # Need a default provider/model for mode resolution
-        prov_name = providers_file.default_provider
-        if prov_name is None:
-            prov_name = list(providers_file.providers.keys())[0]
-        prov = providers_file.providers[prov_name]
-        sel_model = prov.models[0] if prov.models else None
-        if sel_model is None:
+        # Honor --provider filter; otherwise enumerate every (provider, model)
+        # pair so per-model mode overrides remain visible.
+        if provider_filter:
+            if provider_filter not in providers_file.providers:
+                typer.echo(
+                    f"error: unknown provider '{provider_filter}'", err=True
+                )
+                raise typer.Exit(1)
+            scopes = [
+                (provider_filter, providers_file.providers[provider_filter])
+            ]
+        else:
+            scopes = list(providers_file.providers.items())
+
+        seen: dict[str, str] = {}
+        for prov_name, prov in scopes:
+            models_iter = prov.models if prov.models else [None]
+            for sel_model in models_iter:
+                if sel_model is None:
+                    continue
+                all_modes = resolve_modes(providers_file, prov_name, sel_model)
+                for name in all_modes:
+                    source = get_mode_source(
+                        name, providers_file, prov_name, sel_model
+                    )
+                    key = f"{prov_name}/{sel_model.id}:{name}"
+                    seen[key] = source
+
+        if not seen:
             typer.echo("error: no models configured", err=True)
             raise typer.Exit(1)
 
-        all_modes = resolve_modes(providers_file, prov_name, sel_model)
-        for name in sorted(all_modes.keys()):
-            source = get_mode_source(name, providers_file, prov_name, sel_model)
-            typer.echo(f"  {name}  ({source})")
+        for key in sorted(seen):
+            typer.echo(f"  {key}  ({seen[key]})")
 
     elif what == "templates":
         templates = resolve_templates(providers_file)

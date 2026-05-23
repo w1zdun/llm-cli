@@ -65,18 +65,26 @@ class Mode(BaseModel):
         alias="maxOutputTokens",
         description="Output token budget for this mode",
     )
-    role: str = Field(
-        "user",
-        description="Role of the prompt message: 'user' or 'developer'",
+    role: str | None = Field(
+        None,
+        description=(
+            "Role of the prompt message: 'user' (default) or 'developer'. "
+            "None means inherit from a lower layer."
+        ),
     )
 
     @model_validator(mode="after")
     def _check_role(self) -> Mode:
-        if self.role not in ("user", "developer"):
+        if self.role is not None and self.role not in ("user", "developer"):
             raise ValueError(
                 f"invalid role '{self.role}'; valid: user, developer"
             )
         return self
+
+    @property
+    def effective_role(self) -> str:
+        """Resolved role with 'user' as the implicit default."""
+        return self.role or "user"
 
 
 class SamplingTemplate(RootModel[dict[str, Any]]):

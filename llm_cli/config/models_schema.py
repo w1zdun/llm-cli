@@ -58,7 +58,6 @@ class Model(BaseModel):
     context_window: int | None = Field(
         None, alias="contextWindow", description="Context window size in tokens"
     )
-    max_tokens: int | None = Field(None, description="Max output tokens")
     reasoning: bool = Field(
         False, description="Whether the model supports reasoning"
     )
@@ -104,13 +103,19 @@ class Model(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _reject_thinking_level_map(cls, data: Any) -> Any:
-        """Reject thinkingLevelMap with a clear error."""
+    def _reject_legacy_fields(cls, data: Any) -> Any:
+        """Reject removed legacy fields with a clear migration message."""
         if isinstance(data, dict):
             if "thinkingLevelMap" in data or "thinking_level_map" in data:
                 raise ValueError(
                     "thinkingLevelMap is no longer supported. "
-                    "Use enable_thinking and preserve_thinking as plain sampling keys instead."
+                    "Use enable_thinking and preserve_thinking as plain "
+                    "sampling keys instead."
+                )
+            if "max_tokens" in data:
+                raise ValueError(
+                    "model.max_tokens is no longer supported. "
+                    "Use maxOutputTokens (or max_output_tokens) instead."
                 )
         return data
 

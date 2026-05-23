@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import atexit
 import base64
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -10,6 +12,15 @@ from typing import Any
 import fitz  # PyMuPDF
 
 _MAX_PAGES_DEFAULT = 25
+
+
+def _register_tmp_cleanup(path: str) -> None:
+    """Schedule removal of a temp directory at process exit."""
+
+    def _cleanup() -> None:
+        shutil.rmtree(path, ignore_errors=True)
+
+    atexit.register(_cleanup)
 
 
 def _open_pdf(path: str, max_pages: int) -> fitz.Document:
@@ -39,6 +50,11 @@ def _open_pdf(path: str, max_pages: int) -> fitz.Document:
             f"error: PDF has {len(doc)} pages, exceeds --max-pages {max_pages}",
             err=True,
         )
+        doc.close()
+        raise typer.Exit(1)
+
+    if len(doc) == 0:
+        typer.echo(f"error: PDF {path} has no pages", err=True)
         doc.close()
         raise typer.Exit(1)
 
@@ -76,6 +92,7 @@ def read_pdf_images(
 
     if file_passing == "path":
         tmp_dir = tempfile.mkdtemp(prefix="llm_pdf_")
+        _register_tmp_cleanup(tmp_dir)
         for i, page in enumerate(doc):
             pix = page.get_pixmap(matrix=mat)
             png_path = Path(tmp_dir) / f"page_{i + 1}.png"
@@ -86,7 +103,6 @@ def read_pdf_images(
                     "image_url": {"url": f"file://{png_path}"},
                 }
             )
-        entries[0]["_temp_dir"] = tmp_dir
     else:
         for i, page in enumerate(doc):
             pix = page.get_pixmap(matrix=mat)
