@@ -180,6 +180,7 @@ name = "llm-cli"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "click" },
     { name = "httpx" },
     { name = "jinja2" },
     { name = "json5" },
@@ -197,6 +198,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "click", specifier = ">=8.1" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "json5", specifier = ">=0.14" },
@@ -205,7 +207,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.13" },
     { name = "pymupdf", specifier = ">=1.25" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8" },
-    { name = "typer", specifier = ">=0.25" },
+    { name = "typer", specifier = ">=0.25,<0.26" },
 ]
 provides-extras = ["test"]
 

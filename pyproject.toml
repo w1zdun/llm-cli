@@ -7,8 +7,9 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "w1zdun" }]
 dependencies = [
+  "click>=8.1",
   "httpx>=0.28",
-  "typer>=0.25",
+  "typer>=0.25,<0.26",
   "pydantic>=2.13",
   "jsonschema>=4.23",
   "pymupdf>=1.25",
