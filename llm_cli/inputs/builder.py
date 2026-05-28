@@ -7,7 +7,9 @@ from typing import Any
 import typer
 
 from llm_cli.config.models_schema import Model, Provider
+from llm_cli.config.modes_schema import Mode
 from llm_cli.inputs.image import read_image_file
+from llm_cli.inputs.image_resolve import resolve_image_preprocessing
 from llm_cli.inputs.parser import ParsedInputs, classify_file
 from llm_cli.inputs.pdf import read_pdf_images, read_pdf_text
 from llm_cli.inputs.strategy import check_image_capability, resolve_pdf_strategy
@@ -18,6 +20,7 @@ def build_user_message(
     parsed: ParsedInputs,
     model: Model,
     provider: Provider,
+    mode: Mode,
     pdf_strategy: str = "auto",
     max_pages: int = 25,
 ) -> list[dict[str, Any]]:
@@ -29,6 +32,7 @@ def build_user_message(
         parsed: Parsed inputs (file paths + prompt).
         model: Resolved model.
         provider: Resolved provider (for file_passing).
+        mode: Resolved mode (for image preprocessing layer).
         pdf_strategy: PDF handling strategy.
         max_pages: Max PDF pages.
 
@@ -37,6 +41,7 @@ def build_user_message(
     """
     content: list[dict[str, Any]] = []
     file_passing = provider.file_passing or "inline"
+    image_preprocessing = resolve_image_preprocessing(provider, model, mode)
 
     for file_path in parsed.file_paths:
         ftype = classify_file(file_path)
@@ -47,7 +52,11 @@ def build_user_message(
 
         elif ftype == "image":
             check_image_capability(model)
-            entry = read_image_file(file_path, file_passing=file_passing)
+            entry = read_image_file(
+                file_path,
+                file_passing=file_passing,
+                image_preprocessing=image_preprocessing,
+            )
             content.append(entry)
 
         elif ftype == "pdf":
@@ -55,7 +64,10 @@ def build_user_message(
             if effective == "images":
                 check_image_capability(model)
                 images = read_pdf_images(
-                    file_path, max_pages, file_passing=file_passing
+                    file_path,
+                    max_pages,
+                    file_passing=file_passing,
+                    image_preprocessing=image_preprocessing,
                 )
                 content.extend(images)
             else:

@@ -2,25 +2,20 @@
 
 from __future__ import annotations
 
-import atexit
 import base64
-import shutil
 import tempfile
 from pathlib import Path
 from typing import Any
 
 import fitz  # PyMuPDF
 
+from llm_cli.inputs._tmp import register_tmp_dir_cleanup
+from llm_cli.inputs.image_preprocess import (
+    ImagePreprocessing,
+    preprocess_image_bytes,
+)
+
 _MAX_PAGES_DEFAULT = 25
-
-
-def _register_tmp_cleanup(path: str) -> None:
-    """Schedule removal of a temp directory at process exit."""
-
-    def _cleanup() -> None:
-        shutil.rmtree(path, ignore_errors=True)
-
-    atexit.register(_cleanup)
 
 
 def _open_pdf(path: str, max_pages: int) -> fitz.Document:
@@ -78,39 +73,64 @@ def read_pdf_text(
     return "\n\n".join(parts)
 
 
+_EXT_BY_FORMAT = {"png": ".png", "jpeg": ".jpg"}
+
+
 def read_pdf_images(
     path: str,
     max_pages: int = _MAX_PAGES_DEFAULT,
     dpi: int = 150,
     file_passing: str = "inline",
+    image_preprocessing: ImagePreprocessing | None = None,
 ) -> list[dict[str, Any]]:
-    """Rasterize PDF pages to images."""
+    """Rasterize PDF pages to images, optionally running preprocessing."""
     doc = _open_pdf(path, max_pages)
     zoom = dpi / 72
     mat = fitz.Matrix(zoom, zoom)
     entries: list[dict[str, Any]] = []
+    use_preproc = (
+        image_preprocessing is not None and image_preprocessing.enabled
+    )
+    out_ext = (
+        _EXT_BY_FORMAT[image_preprocessing.output_format]
+        if use_preproc
+        else ".png"
+    )
 
     if file_passing == "path":
         tmp_dir = tempfile.mkdtemp(prefix="llm_pdf_")
-        _register_tmp_cleanup(tmp_dir)
+        register_tmp_dir_cleanup(tmp_dir)
         for i, page in enumerate(doc):
             pix = page.get_pixmap(matrix=mat)
-            png_path = Path(tmp_dir) / f"page_{i + 1}.png"
-            pix.save(str(png_path))
+            page_path = Path(tmp_dir) / f"page_{i + 1}{out_ext}"
+            if use_preproc:
+                processed, _mime = preprocess_image_bytes(
+                    pix.tobytes("png"), "image/png", image_preprocessing
+                )
+                page_path.write_bytes(processed)
+            else:
+                pix.save(str(page_path))
             entries.append(
                 {
                     "type": "image_url",
-                    "image_url": {"url": f"file://{png_path}"},
+                    "image_url": {"url": f"file://{page_path}"},
                 }
             )
     else:
         for i, page in enumerate(doc):
             pix = page.get_pixmap(matrix=mat)
-            b64 = base64.b64encode(pix.tobytes("png")).decode("ascii")
+            raw = pix.tobytes("png")
+            if use_preproc:
+                payload, mime = preprocess_image_bytes(
+                    raw, "image/png", image_preprocessing
+                )
+            else:
+                payload, mime = raw, "image/png"
+            b64 = base64.b64encode(payload).decode("ascii")
             entries.append(
                 {
                     "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{b64}"},
+                    "image_url": {"url": f"data:{mime};base64,{b64}"},
                 }
             )
 

@@ -4,7 +4,85 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    RootModel,
+    field_validator,
+    model_validator,
+)
+
+_VALID_OUTPUT_FORMATS = {"png", "jpeg"}
+
+
+class ImagePreprocessingConfig(BaseModel):
+    """Configurable image preprocessing applied before sending to the model.
+
+    All fields are Optional so layers (provider/model/mode) can override
+    individual keys without restating defaults. The runtime resolver fills
+    in defaults after merging.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    enabled: bool | None = Field(
+        None, description="Master switch; defaults to True when block present"
+    )
+    convert_rgb: bool | None = Field(
+        None,
+        alias="convertRgb",
+        description="Convert non-RGB modes (RGBA/P/CMYK/L) to RGB",
+    )
+    exif_transpose: bool | None = Field(
+        None,
+        alias="exifTranspose",
+        description="Apply EXIF orientation tag before processing",
+    )
+    max_long_side: int | None = Field(
+        None,
+        alias="maxLongSide",
+        description="Downscale so the longer side is at most this many pixels",
+    )
+    output_format: str | None = Field(
+        None,
+        alias="outputFormat",
+        description="Output encoding: 'png' or 'jpeg'",
+    )
+    jpeg_quality: int | None = Field(
+        None,
+        alias="jpegQuality",
+        description="JPEG encoder quality (1-100); ignored for PNG output",
+    )
+    background: str | None = Field(
+        None,
+        description="Background color used to flatten alpha (e.g. 'white')",
+    )
+
+    @field_validator("max_long_side")
+    @classmethod
+    def _check_max_long_side(cls, v: int | None) -> int | None:
+        if v is not None and v <= 0:
+            raise ValueError("max_long_side must be > 0 (or null)")
+        return v
+
+    @field_validator("output_format")
+    @classmethod
+    def _check_output_format(cls, v: str | None) -> str | None:
+        if v is not None and v not in _VALID_OUTPUT_FORMATS:
+            raise ValueError(
+                f"invalid output_format '{v}'; "
+                f"valid: {sorted(_VALID_OUTPUT_FORMATS)}"
+            )
+        return v
+
+    @field_validator("jpeg_quality")
+    @classmethod
+    def _check_jpeg_quality(cls, v: int | None) -> int | None:
+        if v is not None and not (1 <= v <= 100):
+            raise ValueError("jpeg_quality must be between 1 and 100")
+        return v
+
 
 # Allowed sampling keys (keys that belong in sampling, not in mode/template)
 _SAMPLING_KEYS = {
@@ -54,6 +132,11 @@ class Mode(BaseModel):
     )
     extra_body: dict[str, Any] | None = Field(
         None, description="extra_body overrides for this mode"
+    )
+    image_preprocessing: ImagePreprocessingConfig | None = Field(
+        None,
+        alias="imagePreprocessing",
+        description="Image preprocessing overrides for this mode",
     )
     max_context_tokens: int | None = Field(
         None,

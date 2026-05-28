@@ -172,6 +172,61 @@ These are automatically routed to `extra_body.chat_template_kwargs.*` at request
 - `max_context_tokens` — client-side input budget (never sent to provider). Exceeded = exit 1.
 - `max_output_tokens` — written to request under the provider-mapped field name (e.g., `max_tokens` for llama.cpp, `num_predict` for ollama).
 
+### Image Preprocessing
+
+Opt-in normalization applied to every image before it reaches the model:
+EXIF auto-rotate, RGB convert (flattens RGBA/CMYK/palette to RGB on a solid
+background), LANCZOS downscale to a target longest side (never upscales),
+re-encode to PNG or JPEG. Applies to both raw image inputs and PDF pages
+rasterized to images.
+
+The block is **absent by default** — existing configs keep their raw-bytes
+behavior. Drop `imagePreprocessing: {}` anywhere (provider / model / mode) to
+enable preprocessing with defaults (`enabled=true`, `convertRgb=true`,
+`exifTranspose=true`, `maxLongSide=1280`, `outputFormat="png"`,
+`jpegQuality=90`, `background="white"`). Layers merge per key — mode wins over
+model wins over provider.
+
+```jsonc
+{
+  "providers": {
+    "nuc": {
+      "baseUrl": "http://localhost:8080/v1",
+      "providerKind": "llama.cpp",
+
+      // Provider-wide baseline
+      "imagePreprocessing": {
+        "maxLongSide": 1280,
+        "outputFormat": "png",
+      },
+
+      "models": [/* ... */],
+    },
+  },
+
+  // Per-mode tuning for vision-relevant modes
+  "modes": {
+    "ocr":      { "imagePreprocessing": { "maxLongSide": 2000 } },
+    "extract":  { "imagePreprocessing": { "maxLongSide": 2000 } },
+    "design":   { "imagePreprocessing": { "maxLongSide": 1600 } },
+    "classify": { "imagePreprocessing": { "maxLongSide": 1024 } },
+    "image":    { "imagePreprocessing": { "maxLongSide": 1280 } },
+  },
+}
+```
+
+Tune `maxLongSide` by intent:
+
+| Mode               | Suggested `maxLongSide` | Notes                              |
+| ------------------ | ----------------------- | ---------------------------------- |
+| `ocr`, `extract`   | 1600–2000               | Fine text needs more pixels        |
+| `design`           | 1600                    | UI mockups, ostre krawędzie        |
+| `image`, `general` | 1280                    | Scene description default         |
+| `classify`         | 1024–1280               | Coarse gist                        |
+
+To disable preprocessing on a specific mode while keeping the provider default
+on, set `"imagePreprocessing": { "enabled": false }`.
+
 ## Built-in Modes
 
 | Mode        | Temp | Description                                 |

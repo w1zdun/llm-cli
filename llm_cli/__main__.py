@@ -372,7 +372,7 @@ def _main(
         messages.append({"role": "system", "content": mode_obj.system_prompt})
 
     user_content = build_user_message(
-        parsed, selected_model, prov, pdf_strategy, max_pages
+        parsed, selected_model, prov, mode_obj, pdf_strategy, max_pages
     )
 
     # Reject empty content

@@ -29,14 +29,16 @@ class TestMessageShape:
         # Minimal test
         parsed = ParsedInputs(file_paths=[], prompt="hello")
         from llm_cli.config.models_schema import Model, Provider
+        from llm_cli.config.modes_schema import Mode
 
         prov = Provider(
             baseUrl="http://localhost/v1",
             models=[],
         )
         model = Model(id="test", input=["text"])
+        mode = Mode()
 
-        content = build_user_message(parsed, model, prov)
+        content = build_user_message(parsed, model, prov, mode)
         assert isinstance(content, list)
         assert len(content) == 1
         assert content[0]["type"] == "text"

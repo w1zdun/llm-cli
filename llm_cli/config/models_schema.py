@@ -12,7 +12,7 @@ from pydantic import (
     model_validator,
 )
 
-from llm_cli.config.modes_schema import Mode
+from llm_cli.config.modes_schema import ImagePreprocessingConfig, Mode
 
 _VALID_INPUTS = {"text", "image"}
 _VALID_KINDS = {"llama.cpp", "vllm", "ollama", "openai-generic"}
@@ -89,6 +89,11 @@ class Model(BaseModel):
     )
     extra_body: dict[str, Any] | None = Field(
         None, description="Per-model extra_body overrides"
+    )
+    image_preprocessing: ImagePreprocessingConfig | None = Field(
+        None,
+        alias="imagePreprocessing",
+        description="Per-model image preprocessing overrides",
     )
 
     @field_validator("input")
@@ -175,6 +180,11 @@ class Provider(BaseModel):
     )
     extra_body: dict[str, Any] | None = Field(
         None, description="Default extra_body for the provider"
+    )
+    image_preprocessing: ImagePreprocessingConfig | None = Field(
+        None,
+        alias="imagePreprocessing",
+        description="Default image preprocessing for the provider",
     )
     models: list[Model] = Field(description="List of models for this provider")
 
